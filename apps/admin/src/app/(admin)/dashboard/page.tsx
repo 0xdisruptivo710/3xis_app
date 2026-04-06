@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { Users, Activity, Zap, TrendingUp } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface StatCardProps {
   label: string;
   value: string | number;

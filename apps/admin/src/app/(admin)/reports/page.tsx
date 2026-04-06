@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { BarChart3, TrendingUp, CheckSquare, Trophy } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ReportsPage() {
   const supabase = await createServerSupabaseClient();
 
