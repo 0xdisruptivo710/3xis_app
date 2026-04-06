@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: #FF6B00;
+    --color-secondary: #1A1A2E;
+    --color-accent: #FFD700;
+    --color-surface: #F8F8F8;
+    --color-on-surface: #212121;
+    --color-success: #00C853;
+    --color-warning: #FFB300;
+    --color-error: #D50000;
+    --color-muted: #9E9E9E;
+  }
+
+  .dark {
+    --color-surface: #121212;
+    --color-on-surface: #E0E0E0;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    min-height: 100dvh;
+    overscroll-behavior-y: contain;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-primary text-white font-semibold py-3 px-6 rounded-xl
+           hover:bg-orange-600 active:scale-[0.98] transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed
+           min-h-[44px] min-w-[44px];
+  }
+
+  .btn-secondary {
+    @apply bg-brand-secondary text-white font-semibold py-3 px-6 rounded-xl
+           hover:bg-opacity-90 active:scale-[0.98] transition-all duration-150
+           min-h-[44px] min-w-[44px];
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-brand-on-surface font-medium py-3 px-6 rounded-xl
+           hover:bg-gray-100 active:scale-[0.98] transition-all duration-150
+           min-h-[44px] min-w-[44px];
+  }
+
+  .card {
+    @apply bg-white rounded-2xl p-4 shadow-sm border border-gray-100;
+  }
+
+  .card-elevated {
+    @apply bg-white rounded-2xl p-4 shadow-md;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200
+           focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20
+           outline-none transition-all duration-150
+           min-h-[44px] text-base;
+  }
+
+  .badge-locked {
+    @apply opacity-40 grayscale;
+  }
+
+  .badge-unlocked {
+    @apply opacity-100 shadow-lg shadow-brand-accent/30;
+  }
+}
+
+@layer utilities {
+  .text-gradient-primary {
+    @apply bg-gradient-to-r from-brand-primary to-orange-500 bg-clip-text text-transparent;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
