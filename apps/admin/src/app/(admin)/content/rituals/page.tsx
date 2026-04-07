@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Pencil, Trash2, Sunrise, X, ToggleLeft, ToggleRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Plus, Pencil, Trash2, Sunrise, X, ToggleLeft, ToggleRight, Loader2, AlertCircle } from 'lucide-react';
 
 interface Ritual {
   id: string;
@@ -15,6 +16,11 @@ interface Ritual {
   xp_reward: number;
   is_active: boolean;
   sort_order: number;
+}
+
+interface Message {
+  type: 'success' | 'error';
+  text: string;
 }
 
 const RITUAL_TYPE_LABELS: Record<string, string> = {
@@ -32,9 +38,13 @@ const RITUAL_TYPE_COLORS: Record<string, string> = {
 export default function RitualsPage() {
   const [rituals, setRituals] = useState<Ritual[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingRitual, setEditingRitual] = useState<Ritual | null>(null);
-  const supabase = createClient();
+  const [message, setMessage] = useState<Message | null>(null);
+  const supabaseRef = useRef(createClient());
 
   const [formData, setFormData] = useState({
     title: '',
@@ -50,13 +60,19 @@ export default function RitualsPage() {
 
   const fetchRituals = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabaseRef.current
       .from('x3_rituals')
       .select('*')
       .order('sort_order');
-    setRituals(data ?? []);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao carregar rituais: ' + error.message });
+      setRituals([]);
+    } else {
+      setRituals(data ?? []);
+    }
     setLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     fetchRituals();
@@ -95,6 +111,7 @@ export default function RitualsPage() {
   }
 
   async function handleSave() {
+    setSaving(true);
     const payload = {
       title: formData.title,
       description: formData.description,
@@ -108,27 +125,69 @@ export default function RitualsPage() {
     };
 
     if (editingRitual) {
-      await supabase.from('x3_rituals').update(payload).eq('id', editingRitual.id);
+      const { error } = await supabaseRef.current
+        .from('x3_rituals')
+        .update(payload)
+        .eq('id', editingRitual.id);
+
+      if (error) {
+        setMessage({ type: 'error', text: 'Erro ao atualizar ritual: ' + error.message });
+        setSaving(false);
+        return;
+      }
+      setMessage({ type: 'success', text: 'Ritual atualizado com sucesso!' });
     } else {
-      await supabase.from('x3_rituals').insert(payload);
+      const { error } = await supabaseRef.current
+        .from('x3_rituals')
+        .insert(payload);
+
+      if (error) {
+        setMessage({ type: 'error', text: 'Erro ao criar ritual: ' + error.message });
+        setSaving(false);
+        return;
+      }
+      setMessage({ type: 'success', text: 'Ritual criado com sucesso!' });
     }
 
+    setSaving(false);
     setShowForm(false);
     fetchRituals();
   }
 
   async function handleToggleActive(ritual: Ritual) {
-    await supabase
+    setTogglingId(ritual.id);
+    const { error } = await supabaseRef.current
       .from('x3_rituals')
       .update({ is_active: !ritual.is_active })
       .eq('id', ritual.id);
-    fetchRituals();
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao alterar status do ritual: ' + error.message });
+    } else {
+      setMessage({
+        type: 'success',
+        text: `Ritual ${!ritual.is_active ? 'ativado' : 'desativado'} com sucesso!`,
+      });
+      fetchRituals();
+    }
+    setTogglingId(null);
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Tem certeza que deseja excluir este ritual?')) return;
-    await supabase.from('x3_rituals').delete().eq('id', id);
-    fetchRituals();
+    setDeletingId(id);
+    const { error } = await supabaseRef.current
+      .from('x3_rituals')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao excluir ritual: ' + error.message });
+    } else {
+      setMessage({ type: 'success', text: 'Ritual excluido com sucesso!' });
+      fetchRituals();
+    }
+    setDeletingId(null);
   }
 
   return (
@@ -146,6 +205,18 @@ export default function RitualsPage() {
           Novo Ritual
         </button>
       </div>
+
+      {/* Message */}
+      {message && (
+        <div className={cn(
+          'p-3 rounded-lg text-sm flex items-center gap-2',
+          message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+        )}>
+          {message.type === 'error' && <AlertCircle size={16} />}
+          {message.text}
+          <button onClick={() => setMessage(null)} className="ml-auto"><X size={14} /></button>
+        </div>
+      )}
 
       {/* Form Modal */}
       {showForm && (
@@ -252,10 +323,15 @@ export default function RitualsPage() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowForm(false)} className="btn-ghost flex-1">
+              <button onClick={() => setShowForm(false)} className="btn-ghost flex-1" disabled={saving}>
                 Cancelar
               </button>
-              <button onClick={handleSave} className="btn-primary flex-1">
+              <button
+                onClick={handleSave}
+                className="btn-primary flex-1 flex items-center justify-center gap-2"
+                disabled={saving}
+              >
+                {saving && <Loader2 size={16} className="animate-spin" />}
                 {editingRitual ? 'Salvar' : 'Criar'}
               </button>
             </div>
@@ -292,8 +368,11 @@ export default function RitualsPage() {
                   onClick={() => handleToggleActive(ritual)}
                   className="text-brand-muted hover:text-brand-on-surface"
                   title={ritual.is_active ? 'Desativar' : 'Ativar'}
+                  disabled={togglingId === ritual.id}
                 >
-                  {ritual.is_active ? (
+                  {togglingId === ritual.id ? (
+                    <Loader2 size={24} className="animate-spin" />
+                  ) : ritual.is_active ? (
                     <ToggleRight size={24} className="text-brand-success" />
                   ) : (
                     <ToggleLeft size={24} />
@@ -315,8 +394,13 @@ export default function RitualsPage() {
                   <button
                     onClick={() => handleDelete(ritual.id)}
                     className="p-1 rounded hover:bg-red-50 hover:text-brand-error transition-colors"
+                    disabled={deletingId === ritual.id}
                   >
-                    <Trash2 size={14} />
+                    {deletingId === ritual.id ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={14} />
+                    )}
                   </button>
                 </div>
               </div>

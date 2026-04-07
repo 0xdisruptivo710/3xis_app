@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Pencil, Trash2, Search, FileText, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, FileText, X, Loader2, AlertCircle, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ScriptCategory {
   id: string;
@@ -29,7 +30,8 @@ export default function ScriptsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [showForm, setShowForm] = useState(false);
   const [editingScript, setEditingScript] = useState<Script | null>(null);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({

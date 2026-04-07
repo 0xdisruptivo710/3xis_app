@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Target, Trash2, X } from 'lucide-react';
+import { Plus, Target, Trash2, X, AlertCircle, Check, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface Store {
   id: string;
@@ -49,7 +50,8 @@ export default function GoalsPage() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [formData, setFormData] = useState({
     scope: 'user' as 'user' | 'store',

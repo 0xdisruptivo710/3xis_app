@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   Search, UserPlus, Mail, Shield, ShieldCheck, User,
   MoreVertical, X, Loader2, Store, Filter, RefreshCw,
-  Check, Ban, Trash2, Send,
+  Check, Ban, Trash2, Send, AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -66,7 +66,7 @@ const LEVEL_NAMES: Record<number, string> = {
 };
 
 export default function UsersPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [users, setUsers] = useState<Profile[]>([]);
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -75,6 +75,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [storeFilter, setStoreFilter] = useState<string>('all');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Modal states
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -131,11 +132,14 @@ export default function UsersPage() {
         .limit(50),
     ]);
 
+    if (usersRes.error) {
+      setMessage({ type: 'error', text: 'Erro ao carregar usuarios: ' + usersRes.error.message });
+    }
     setUsers((usersRes.data as unknown as Profile[]) ?? []);
     setStores(storesRes.data ?? []);
     setInvitations((invitesRes.data as unknown as Invitation[]) ?? []);
     setLoading(false);
-  }, [supabase, roleFilter, storeFilter, search]);
+  }, [supabase, roleFilter, storeFilter, search]); // supabase is now stable via useMemo
 
   useEffect(() => {
     fetchData();
@@ -173,12 +177,21 @@ export default function UsersPage() {
   }
 
   async function handleRoleChange(userId: string, newRole: string) {
-    await supabase.from('x3_profiles').update({ role: newRole }).eq('id', userId);
+    const { error } = await supabase.from('x3_profiles').update({ role: newRole }).eq('id', userId);
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao alterar cargo: ' + error.message });
+      return;
+    }
+    setMessage({ type: 'success', text: 'Cargo atualizado!' });
     fetchData();
   }
 
   async function handleStoreChange(userId: string, newStoreId: string | null) {
-    await supabase.from('x3_profiles').update({ store_id: newStoreId }).eq('id', userId);
+    const { error } = await supabase.from('x3_profiles').update({ store_id: newStoreId }).eq('id', userId);
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao alterar loja: ' + error.message });
+      return;
+    }
     fetchData();
   }
 
@@ -194,20 +207,32 @@ export default function UsersPage() {
     if (!selectedUser) return;
     setSaving(true);
 
-    await supabase.from('x3_profiles').update({
+    const { error } = await supabase.from('x3_profiles').update({
       full_name: editName.trim(),
       role: editRole,
       store_id: editStoreId || null,
     }).eq('id', selectedUser.id);
 
     setSaving(false);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao salvar usuario: ' + error.message });
+      return;
+    }
+
+    setMessage({ type: 'success', text: 'Usuario atualizado!' });
     setShowEditModal(false);
     setSelectedUser(null);
     fetchData();
   }
 
   async function revokeInvitation(inviteId: string) {
-    await supabase.from('x3_invitations').update({ status: 'revoked' }).eq('id', inviteId);
+    const { error } = await supabase.from('x3_invitations').update({ status: 'revoked' }).eq('id', inviteId);
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao revogar convite: ' + error.message });
+      return;
+    }
+    setMessage({ type: 'success', text: 'Convite revogado.' });
     fetchData();
   }
 
@@ -215,13 +240,20 @@ export default function UsersPage() {
     if (!newStoreName.trim()) return;
     setCreatingStore(true);
 
-    await supabase.from('x3_stores').insert({
+    const { error } = await supabase.from('x3_stores').insert({
       name: newStoreName.trim(),
       city: newStoreCity.trim() || null,
       state: newStoreState.trim() || null,
     });
 
     setCreatingStore(false);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao criar loja: ' + error.message });
+      return;
+    }
+
+    setMessage({ type: 'success', text: 'Loja "' + newStoreName.trim() + '" criada!' });
     setShowCreateStoreModal(false);
     setNewStoreName('');
     setNewStoreCity('');
@@ -263,6 +295,18 @@ export default function UsersPage() {
           </button>
         </div>
       </div>
+
+      {/* Message toast */}
+      {message && (
+        <div className={cn(
+          'p-3 rounded-lg text-sm flex items-center gap-2',
+          message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+        )}>
+          {message.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
+          <span className="flex-1">{message.text}</span>
+          <button onClick={() => setMessage(null)} className="ml-auto hover:opacity-70"><X size={14} /></button>
+        </div>
+      )}
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

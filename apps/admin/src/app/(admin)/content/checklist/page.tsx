@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Trash2, GripVertical, CheckSquare, X, Save } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Plus, Trash2, GripVertical, CheckSquare, X, Save, Loader2, AlertCircle } from 'lucide-react';
 
 interface ChecklistTemplate {
   id: string;
@@ -19,6 +20,11 @@ interface ChecklistTemplateItem {
   sort_order: number;
 }
 
+interface Message {
+  type: 'success' | 'error';
+  text: string;
+}
+
 export default function ChecklistPage() {
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<ChecklistTemplate | null>(null);
@@ -28,32 +34,56 @@ export default function ChecklistPage() {
   const [newTemplateTitle, setNewTemplateTitle] = useState('');
   const [newItemLabel, setNewItemLabel] = useState('');
   const [newItemXP, setNewItemXP] = useState(10);
+  const [message, setMessage] = useState<Message | null>(null);
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
+  const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
+  const [addingItem, setAddingItem] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const supabase = createClient();
+
+  // Use a ref to track selectedTemplate inside fetchTemplates without adding it to deps
+  const selectedTemplateRef = useRef(selectedTemplate);
+  selectedTemplateRef.current = selectedTemplate;
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('x3_checklist_templates')
       .select('id, title, is_default, store_id')
       .order('created_at');
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao carregar templates: ' + error.message });
+      setLoading(false);
+      return;
+    }
+
     const templateList = data ?? [];
     setTemplates(templateList);
-    if (templateList.length > 0 && !selectedTemplate) {
+    if (templateList.length > 0 && !selectedTemplateRef.current) {
       setSelectedTemplate(templateList[0]);
     }
     setLoading(false);
-  }, [supabase, selectedTemplate]);
+  }, [supabase]);
 
   const fetchItems = useCallback(async () => {
     if (!selectedTemplate) {
       setItems([]);
       return;
     }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('x3_checklist_template_items')
       .select('id, template_id, label, xp_reward, sort_order')
       .eq('template_id', selectedTemplate.id)
       .order('sort_order');
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao carregar itens: ' + error.message });
+      return;
+    }
+
     setItems(data ?? []);
   }, [supabase, selectedTemplate]);
 
@@ -65,62 +95,163 @@ export default function ChecklistPage() {
     fetchItems();
   }, [fetchItems]);
 
+  // Auto-dismiss messages after 5 seconds
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(null), 5000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
   async function handleCreateTemplate() {
     if (!newTemplateTitle.trim()) return;
-    const { data } = await supabase
+    setCreatingTemplate(true);
+    const { data, error } = await supabase
       .from('x3_checklist_templates')
       .insert({ title: newTemplateTitle.trim(), is_default: templates.length === 0 })
       .select()
       .single();
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao criar template: ' + error.message });
+      setCreatingTemplate(false);
+      return;
+    }
+
+    setMessage({ type: 'success', text: 'Template criado!' });
     setShowNewTemplate(false);
     setNewTemplateTitle('');
     if (data) {
       setSelectedTemplate(data);
     }
+    setCreatingTemplate(false);
     fetchTemplates();
   }
 
   async function handleDeleteTemplate(id: string) {
     if (!confirm('Tem certeza? Isso excluira o template e todos os seus itens.')) return;
-    await supabase.from('x3_checklist_templates').delete().eq('id', id);
+    setDeletingTemplateId(id);
+    const { error } = await supabase.from('x3_checklist_templates').delete().eq('id', id);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao excluir template: ' + error.message });
+      setDeletingTemplateId(null);
+      return;
+    }
+
+    setMessage({ type: 'success', text: 'Template excluido!' });
     setSelectedTemplate(null);
+    setDeletingTemplateId(null);
     fetchTemplates();
   }
 
   async function handleSetDefault(id: string) {
+    if (!confirm('Definir este template como padrao para todos os usuarios?')) return;
+    setSettingDefaultId(id);
+
     // Remove default from all
-    await supabase.from('x3_checklist_templates').update({ is_default: false }).neq('id', '');
+    const { error: clearError } = await supabase
+      .from('x3_checklist_templates')
+      .update({ is_default: false })
+      .neq('id', '');
+
+    if (clearError) {
+      setMessage({ type: 'error', text: 'Erro ao atualizar templates: ' + clearError.message });
+      setSettingDefaultId(null);
+      return;
+    }
+
     // Set default on selected
-    await supabase.from('x3_checklist_templates').update({ is_default: true }).eq('id', id);
+    const { error: setError } = await supabase
+      .from('x3_checklist_templates')
+      .update({ is_default: true })
+      .eq('id', id);
+
+    if (setError) {
+      setMessage({ type: 'error', text: 'Erro ao definir padrao: ' + setError.message });
+      setSettingDefaultId(null);
+      return;
+    }
+
+    setMessage({ type: 'success', text: 'Template definido como padrao!' });
+    setSettingDefaultId(null);
     fetchTemplates();
   }
 
   async function handleAddItem() {
     if (!selectedTemplate || !newItemLabel.trim()) return;
+    setAddingItem(true);
     const maxOrder = items.length > 0 ? Math.max(...items.map((i) => i.sort_order)) + 1 : 0;
-    await supabase.from('x3_checklist_template_items').insert({
+    const { error } = await supabase.from('x3_checklist_template_items').insert({
       template_id: selectedTemplate.id,
       label: newItemLabel.trim(),
       xp_reward: newItemXP,
       sort_order: maxOrder,
     });
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao adicionar item: ' + error.message });
+      setAddingItem(false);
+      return;
+    }
+
+    setMessage({ type: 'success', text: 'Item adicionado!' });
     setNewItemLabel('');
     setNewItemXP(10);
+    setAddingItem(false);
     fetchItems();
   }
 
   async function handleDeleteItem(id: string) {
-    await supabase.from('x3_checklist_template_items').delete().eq('id', id);
+    if (!confirm('Excluir este item do checklist?')) return;
+    setDeletingItemId(id);
+    const { error } = await supabase.from('x3_checklist_template_items').delete().eq('id', id);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao excluir item: ' + error.message });
+      setDeletingItemId(null);
+      return;
+    }
+
+    setMessage({ type: 'success', text: 'Item excluido!' });
+    setDeletingItemId(null);
     fetchItems();
   }
 
   async function handleUpdateItemXP(id: string, xp: number) {
-    await supabase.from('x3_checklist_template_items').update({ xp_reward: xp }).eq('id', id);
+    setUpdatingItemId(id);
+    const { error } = await supabase
+      .from('x3_checklist_template_items')
+      .update({ xp_reward: xp })
+      .eq('id', id);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao atualizar XP: ' + error.message });
+      setUpdatingItemId(null);
+      return;
+    }
+
+    setUpdatingItemId(null);
     fetchItems();
   }
 
   return (
     <div className="space-y-6">
+      {/* Message banner */}
+      {message && (
+        <div
+          className={cn(
+            'p-3 rounded-lg text-sm flex items-center gap-2',
+            message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          )}
+        >
+          {message.type === 'error' ? <AlertCircle size={16} /> : <CheckSquare size={16} />}
+          {message.text}
+          <button onClick={() => setMessage(null)} className="ml-auto">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -148,11 +279,21 @@ export default function ChecklistPage() {
             placeholder="Nome do template..."
             className="input-field flex-1"
             onKeyDown={(e) => e.key === 'Enter' && handleCreateTemplate()}
+            disabled={creatingTemplate}
           />
-          <button onClick={handleCreateTemplate} className="btn-primary">
+          <button
+            onClick={handleCreateTemplate}
+            className="btn-primary flex items-center gap-2"
+            disabled={creatingTemplate}
+          >
+            {creatingTemplate ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             Criar
           </button>
-          <button onClick={() => setShowNewTemplate(false)} className="btn-ghost">
+          <button
+            onClick={() => setShowNewTemplate(false)}
+            className="btn-ghost"
+            disabled={creatingTemplate}
+          >
             <X size={18} />
           </button>
         </div>
@@ -211,16 +352,25 @@ export default function ChecklistPage() {
                   {!selectedTemplate.is_default && (
                     <button
                       onClick={() => handleSetDefault(selectedTemplate.id)}
-                      className="btn-ghost text-xs"
+                      className="btn-ghost text-xs flex items-center gap-1"
+                      disabled={settingDefaultId === selectedTemplate.id}
                     >
+                      {settingDefaultId === selectedTemplate.id && (
+                        <Loader2 size={12} className="animate-spin" />
+                      )}
                       Definir como padrao
                     </button>
                   )}
                   <button
                     onClick={() => handleDeleteTemplate(selectedTemplate.id)}
                     className="btn-danger flex items-center gap-1"
+                    disabled={deletingTemplateId === selectedTemplate.id}
                   >
-                    <Trash2 size={14} />
+                    {deletingTemplateId === selectedTemplate.id ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={14} />
+                    )}
                     Excluir
                   </button>
                 </div>
@@ -233,20 +383,34 @@ export default function ChecklistPage() {
                     <GripVertical size={16} className="text-brand-muted flex-shrink-0" />
                     <span className="text-sm text-brand-muted w-6">{index + 1}.</span>
                     <span className="flex-1 text-sm font-medium">{item.label}</span>
-                    <input
-                      type="number"
-                      value={item.xp_reward}
-                      onChange={(e) => handleUpdateItemXP(item.id, parseInt(e.target.value) || 0)}
-                      className="input-field w-20 py-1 px-2 text-xs text-center"
-                      min={0}
-                      title="XP"
-                    />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={item.xp_reward}
+                        onChange={(e) => handleUpdateItemXP(item.id, parseInt(e.target.value) || 0)}
+                        className="input-field w-20 py-1 px-2 text-xs text-center"
+                        min={0}
+                        title="XP"
+                        disabled={updatingItemId === item.id}
+                      />
+                      {updatingItemId === item.id && (
+                        <Loader2
+                          size={12}
+                          className="animate-spin absolute right-1 top-1/2 -translate-y-1/2 text-brand-muted"
+                        />
+                      )}
+                    </div>
                     <span className="text-xs text-brand-muted">XP</span>
                     <button
                       onClick={() => handleDeleteItem(item.id)}
                       className="p-1 rounded hover:bg-red-50 text-brand-muted hover:text-brand-error transition-colors"
+                      disabled={deletingItemId === item.id}
                     >
-                      <Trash2 size={14} />
+                      {deletingItemId === item.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
                     </button>
                   </div>
                 ))}
@@ -262,6 +426,7 @@ export default function ChecklistPage() {
                   placeholder="Novo item do checklist..."
                   className="input-field flex-1 border-0 p-0 focus:ring-0"
                   onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
+                  disabled={addingItem}
                 />
                 <input
                   type="number"
@@ -269,9 +434,15 @@ export default function ChecklistPage() {
                   onChange={(e) => setNewItemXP(parseInt(e.target.value) || 0)}
                   className="input-field w-20 py-1 px-2 text-xs text-center"
                   min={0}
+                  disabled={addingItem}
                 />
                 <span className="text-xs text-brand-muted">XP</span>
-                <button onClick={handleAddItem} className="btn-primary py-1.5 px-3 text-xs">
+                <button
+                  onClick={handleAddItem}
+                  className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1"
+                  disabled={addingItem}
+                >
+                  {addingItem && <Loader2 size={12} className="animate-spin" />}
                   Adicionar
                 </button>
               </div>

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, Pencil, Trash2, Video, Eye, EyeOff, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Video, Eye, EyeOff, X, Loader2, AlertCircle, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface VideoCategory {
   id: string;
@@ -29,7 +30,9 @@ export default function VideosPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingVideo, setEditingVideo] = useState<VideoLesson | null>(null);
-  const supabase = createClient();
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const supabase = useMemo(() => createClient(), []);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -93,6 +96,12 @@ export default function VideosPage() {
   }
 
   async function handleSave() {
+    if (!formData.title.trim() || !formData.youtube_video_id.trim()) {
+      setMessage({ type: 'error', text: 'Titulo e YouTube Video ID sao obrigatorios.' });
+      return;
+    }
+
+    setSaving(true);
     const thumbnailUrl = `https://img.youtube.com/vi/${formData.youtube_video_id}/mqdefault.jpg`;
     const payload = {
       title: formData.title,
@@ -105,27 +114,45 @@ export default function VideosPage() {
       is_published: formData.is_published,
     };
 
+    let error;
     if (editingVideo) {
-      await supabase.from('x3_video_lessons').update(payload).eq('id', editingVideo.id);
+      ({ error } = await supabase.from('x3_video_lessons').update(payload).eq('id', editingVideo.id));
     } else {
-      await supabase.from('x3_video_lessons').insert(payload);
+      ({ error } = await supabase.from('x3_video_lessons').insert(payload));
     }
 
+    setSaving(false);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao salvar video: ' + error.message });
+      return;
+    }
+
+    setMessage({ type: 'success', text: editingVideo ? 'Video atualizado!' : 'Video criado!' });
     setShowForm(false);
     fetchVideos();
   }
 
   async function handleTogglePublish(video: VideoLesson) {
-    await supabase
+    const { error } = await supabase
       .from('x3_video_lessons')
       .update({ is_published: !video.is_published })
       .eq('id', video.id);
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao alterar publicacao: ' + error.message });
+      return;
+    }
     fetchVideos();
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Tem certeza que deseja excluir este video?')) return;
-    await supabase.from('x3_video_lessons').delete().eq('id', id);
+    const { error } = await supabase.from('x3_video_lessons').delete().eq('id', id);
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao excluir video: ' + error.message });
+      return;
+    }
+    setMessage({ type: 'success', text: 'Video excluido.' });
     fetchVideos();
   }
 
@@ -151,6 +178,18 @@ export default function VideosPage() {
           Novo Video
         </button>
       </div>
+
+      {/* Message toast */}
+      {message && (
+        <div className={cn(
+          'p-3 rounded-lg text-sm flex items-center gap-2',
+          message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+        )}>
+          {message.type === 'error' ? <AlertCircle size={16} /> : <Check size={16} />}
+          <span className="flex-1">{message.text}</span>
+          <button onClick={() => setMessage(null)} className="ml-auto hover:opacity-70"><X size={14} /></button>
+        </div>
+      )}
 
       {/* Form Modal */}
       {showForm && (
@@ -251,7 +290,8 @@ export default function VideosPage() {
               <button onClick={() => setShowForm(false)} className="btn-ghost flex-1">
                 Cancelar
               </button>
-              <button onClick={handleSave} className="btn-primary flex-1">
+              <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 flex items-center justify-center gap-2">
+                {saving ? <Loader2 size={16} className="animate-spin" /> : null}
                 {editingVideo ? 'Salvar' : 'Criar'}
               </button>
             </div>
