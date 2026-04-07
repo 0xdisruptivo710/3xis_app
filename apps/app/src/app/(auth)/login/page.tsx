@@ -136,6 +136,14 @@ export default function LoginPage() {
           {message.text}
         </div>
       )}
+
+      {/* Register link */}
+      <div className="text-center pt-4 border-t border-white/10">
+        <p className="text-gray-500 text-xs mb-2">Ainda nao tem conta?</p>
+        <a href="/register" className="text-sm text-brand-primary hover:underline font-medium">
+          Criar conta com codigo de acesso
+        </a>
+      </div>
     </div>
   );
 }
