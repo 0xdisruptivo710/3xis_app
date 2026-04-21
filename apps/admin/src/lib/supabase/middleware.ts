@@ -34,7 +34,10 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login');
+  const isAuthPage = request.nextUrl.pathname.startsWith('/login') ||
+                     request.nextUrl.pathname.startsWith('/forgot-password') ||
+                     request.nextUrl.pathname.startsWith('/reset-password');
+  const isPasswordReset = request.nextUrl.pathname.startsWith('/reset-password');
   const isApiRoute = request.nextUrl.pathname.startsWith('/api');
   const isPublicFile = request.nextUrl.pathname.startsWith('/_next') ||
                        request.nextUrl.pathname.startsWith('/favicon');
@@ -50,7 +53,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Authenticated — check role for admin access
+  // Authenticated — check role for admin access (skip when on password reset, since
+  // recovery sessions are temporary and the profile may belong to any role)
   if (user && !isAuthPage) {
     const { data: profile } = await supabase
       .from('x3_profiles')
@@ -58,7 +62,7 @@ export async function updateSession(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    if (!profile || !['admin', 'supervisor'].includes(profile.role)) {
+    if (!profile || !['admin', 'supervisor', 'super_admin'].includes(profile.role)) {
       // Not an admin or supervisor — deny access
       const url = request.nextUrl.clone();
       url.pathname = '/login';
@@ -69,8 +73,8 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // Authenticated admin on auth page — redirect to dashboard
-  if (user && isAuthPage) {
+  // Authenticated admin on auth page — redirect to dashboard (except on /reset-password)
+  if (user && isAuthPage && !isPasswordReset) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

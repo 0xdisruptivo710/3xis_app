@@ -36,7 +36,13 @@ export async function updateSession(request: NextRequest) {
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/login') ||
                      request.nextUrl.pathname.startsWith('/register') ||
-                     request.nextUrl.pathname.startsWith('/onboarding');
+                     request.nextUrl.pathname.startsWith('/onboarding') ||
+                     request.nextUrl.pathname.startsWith('/forgot-password') ||
+                     request.nextUrl.pathname.startsWith('/reset-password');
+
+  // /reset-password requires an active recovery session — let the page itself
+  // handle the "no session" case and offer a link back to /forgot-password.
+  const isPasswordReset = request.nextUrl.pathname.startsWith('/reset-password');
   const isApiRoute = request.nextUrl.pathname.startsWith('/api');
   const isPublicFile = request.nextUrl.pathname.startsWith('/_next') ||
                        request.nextUrl.pathname.startsWith('/icons') ||
@@ -53,7 +59,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthPage) {
+  if (user && isAuthPage && !isPasswordReset) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

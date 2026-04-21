@@ -12,7 +12,8 @@
     "dev:app": "turbo dev --filter=app",
     "dev:admin": "turbo dev --filter=admin",
     "build:app": "turbo build --filter=app",
-    "build:admin": "turbo build --filter=admin"
+    "build:admin": "turbo build --filter=admin",
+    "seed:super-admin": "node scripts/seed-super-admin.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -20,6 +21,7 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
     "pg": "^8.20.0"
   }
 }

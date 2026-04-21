@@ -35,6 +35,7 @@ interface Invitation {
   status: string;
   created_at: string;
   expires_at: string;
+  token: string;
   x3_stores?: { name: string } | null;
 }
 
@@ -127,7 +128,7 @@ export default function UsersPage() {
       supabase.from('x3_stores').select('id, name').order('name'),
       supabase
         .from('x3_invitations')
-        .select('id, email, role, status, created_at, expires_at, x3_stores(name)')
+        .select('id, email, role, status, created_at, expires_at, token, x3_stores(name)')
         .order('created_at', { ascending: false })
         .limit(50),
     ]);
@@ -233,6 +234,40 @@ export default function UsersPage() {
       return;
     }
     setMessage({ type: 'success', text: 'Convite revogado.' });
+    fetchData();
+  }
+
+  async function resendInvitation(invite: Invitation) {
+    const newExpires = new Date();
+    newExpires.setDate(newExpires.getDate() + 7);
+
+    const { error } = await supabase
+      .from('x3_invitations')
+      .update({
+        status: 'pending',
+        expires_at: newExpires.toISOString(),
+      })
+      .eq('id', invite.id);
+
+    if (error) {
+      setMessage({ type: 'error', text: 'Erro ao reenviar convite: ' + error.message });
+      return;
+    }
+
+    const inviteUrl = `${window.location.origin.replace('admin', 'app')}/register?token=${invite.token}`;
+
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setMessage({
+        type: 'success',
+        text: `Convite reativado por +7 dias e link copiado: ${inviteUrl}`,
+      });
+    } catch {
+      setMessage({
+        type: 'success',
+        text: `Convite reativado. Compartilhe: ${inviteUrl}`,
+      });
+    }
     fetchData();
   }
 
@@ -546,15 +581,27 @@ export default function UsersPage() {
                       {new Date(inv.expires_at).toLocaleDateString('pt-BR')}
                     </td>
                     <td className="table-cell">
-                      {inv.status === 'pending' && (
-                        <button
-                          onClick={() => revokeInvitation(inv.id)}
-                          className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
-                        >
-                          <Ban size={12} />
-                          Revogar
-                        </button>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {(inv.status === 'pending' || inv.status === 'expired' || inv.status === 'revoked') && (
+                          <button
+                            onClick={() => resendInvitation(inv)}
+                            className="text-xs text-brand-primary hover:underline flex items-center gap-1"
+                            title="Reativa por +7 dias e copia o link"
+                          >
+                            <RefreshCw size={12} />
+                            Reenviar
+                          </button>
+                        )}
+                        {inv.status === 'pending' && (
+                          <button
+                            onClick={() => revokeInvitation(inv.id)}
+                            className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                          >
+                            <Ban size={12} />
+                            Revogar
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

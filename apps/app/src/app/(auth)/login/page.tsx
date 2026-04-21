@@ -3,15 +3,48 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Send, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'password' | 'magic_link'>('password');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  async function handleResendAccess() {
+    if (!email.trim()) {
+      setMessage({ type: 'error', text: 'Digite seu email primeiro para reenviar o acesso.' });
+      return;
+    }
+    setResending(true);
+    setMessage(null);
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/api/v1/auth/callback`,
+      },
+    });
+
+    if (error) {
+      setMessage({
+        type: 'error',
+        text: 'Nao foi possivel reenviar o acesso. Confira o email digitado.',
+      });
+    } else {
+      setMessage({
+        type: 'success',
+        text: 'Se este email tiver acesso, voce recebera um link para entrar.',
+      });
+    }
+    setResending(false);
+  }
 
   async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -83,9 +116,17 @@ export default function LoginPage() {
 
         {mode === 'password' && (
           <div>
-            <label htmlFor="password" className="block text-sm text-gray-300 mb-1.5">
-              Senha
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="password" className="block text-sm text-gray-300">
+                Senha
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-xs text-brand-primary hover:underline"
+              >
+                Esqueci minha senha
+              </Link>
+            </div>
             <input
               id="password"
               type="password"
@@ -109,18 +150,32 @@ export default function LoginPage() {
       </form>
 
       {/* Toggle mode */}
-      <div className="text-center">
+      <div className="text-center space-y-3">
         <button
           type="button"
           onClick={() => {
             setMode(mode === 'password' ? 'magic_link' : 'password');
             setMessage(null);
           }}
-          className="text-sm text-brand-primary hover:underline"
+          className="text-sm text-brand-primary hover:underline block w-full"
         >
           {mode === 'password'
             ? 'Entrar com link mágico (sem senha)'
             : 'Entrar com email e senha'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleResendAccess}
+          disabled={resending}
+          className="inline-flex items-center justify-center gap-2 text-xs text-gray-400 hover:text-white transition-colors"
+        >
+          {resending ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Send size={12} />
+          )}
+          {resending ? 'Reenviando...' : 'Reenviar acesso por email'}
         </button>
       </div>
 

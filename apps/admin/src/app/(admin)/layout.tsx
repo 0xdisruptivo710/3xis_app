@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -19,6 +19,7 @@ import {
   LogOut,
   Menu,
   X,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface NavItem {
@@ -67,6 +68,27 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
   const supabase = createClient();
   const [expandedItems, setExpandedItems] = useState<string[]>(['/content']);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function loadRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('x3_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      if (active && profile?.role === 'super_admin') {
+        setIsSuperAdmin(true);
+      }
+    }
+    loadRole();
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
 
   function toggleExpanded(href: string) {
     setExpandedItems((prev) =>
@@ -103,6 +125,21 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        {isSuperAdmin && (
+          <Link
+            href="/platform"
+            onClick={onNavigate}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors mb-2',
+              isActive('/platform')
+                ? 'bg-brand-primary text-white'
+                : 'bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20'
+            )}
+          >
+            <ShieldCheck size={20} />
+            Plataforma
+          </Link>
+        )}
         {navigation.map((item) => {
           const hasChildren = item.children && item.children.length > 0;
           const isExpanded = expandedItems.includes(item.href);

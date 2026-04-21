@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -64,7 +65,15 @@ function LoginForm() {
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm text-gray-300 mb-1.5">Senha</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label htmlFor="password" className="block text-sm text-gray-300">Senha</label>
+            <Link
+              href="/forgot-password"
+              className="text-xs text-brand-primary hover:underline"
+            >
+              Esqueci minha senha
+            </Link>
+          </div>
           <input
             id="password"
             type="password"
