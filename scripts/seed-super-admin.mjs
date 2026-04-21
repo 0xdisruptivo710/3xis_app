@@ -99,6 +99,13 @@ async function main() {
     console.log(`[seed-super-admin] Usuario criado: ${user.id}`);
   } else {
     console.log(`[seed-super-admin] Usuario ja existe: ${user.id}`);
+    console.log('[seed-super-admin] Atualizando senha para a senha impressa abaixo...');
+    const { error: updateError } = await admin.auth.admin.updateUserById(user.id, {
+      password: PASSWORD,
+      email_confirm: true,
+      user_metadata: { full_name: NAME },
+    });
+    if (updateError) throw updateError;
   }
 
   // O trigger handle_new_user cria o profile automaticamente,
